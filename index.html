@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DnD 骰子模拟器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 15px;
+            font-family: Arial, sans-serif;
+            background-color: #f9f9f9;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            padding: 10px;
+        }
+
+        h1 {
+            text-align: center;
+            margin: 15px 0;
+            font-size: 1.5em;
+            color: #333;
+        }
+
+        .dice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .dice-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .dice-image {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+        }
+
+        .quantity-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin: 10px 0;
+        }
+
+        .quantity-btn {
+            width: 30px;
+            height: 30px;
+            border: none;
+            border-radius: 50%;
+            background-color: #2196F3;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .quantity-btn:active {
+            background-color: #1976D2;
+        }
+
+        .current-quantity {
+            font-size: 18px;
+            min-width: 30px;
+        }
+
+        .roll-controls {
+            text-align: center;
+            margin: 20px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .roll-controls button {
+            padding: 12px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 25px;
+            background-color: #2196F3;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        #reset-button {
+            background-color: #f44336;
+        }
+
+        .result-display {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+
+        .global-options {
+            text-align: center;
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .global-options label {
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .total-sum {
+            font-weight: bold;
+            color: #2196F3;
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 2px solid #eee;
+        }
+
+        .dice-card[data-dice="d4"] .dice-image {
+            background-color: #FFCDD2;
+        }
+
+        .dice-card[data-dice="d6"] .dice-image {
+            background-color: #C8E6C9;
+        }
+
+        .dice-card[data-dice="d8"] .dice-image {
+            background-color: #BBDEFB;
+        }
+
+        .dice-card[data-dice="d10"] .dice-image {
+            background-color: #FFE0B2;
+        }
+
+        .dice-card[data-dice="d12"] .dice-image {
+            background-color: #D1C4E9;
+        }
+
+        .dice-card[data-dice="d20"] .dice-image {
+            background-color: #FFF9C4;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            margin-top: 5px;
+            overflow: hidden;
+            display: none;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0;
+            border-radius: 10px;
+            transition: width 0.1s ease;
+        }
+
+        .progress-bar-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #333;
+            font-size: 14px;
+        }
+
+        @media (min-width: 768px) {
+            .dice-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>DnD 骰子模拟器</h1>
+        <div id="dice-container" class="dice-grid">
+            <div class="dice-card" data-dice="d4">
+                <div class="dice-image">D4</div>
+                <div class="quantity-controls">
+                    <button class="quantity-btn minus">-</button>
+                    <span class="current-quantity">0</span>
+                    <button class="quantity-btn plus">+</button>
+                </div>
+            </div>
+            <div class="dice-card" data-dice="d6">
+                <div class="dice-image">D6</div>
+                <div class="quantity-controls">
+                    <button class="quantity-btn minus">-</button>
+                    <span class="current-quantity">0</span>
+                    <button class="quantity-btn plus">+</button>
+                </div>
+            </div>
+            <div class="dice-card" data-dice="d8">
+                <div class="dice-image">D8</div>
+                <div class="quantity-controls">
+                    <button class="quantity-btn minus">-</button>
+                    <span class="current-quantity">0</span>
+                    <button class="quantity-btn plus">+</button>
+                </div>
+            </div>
+            <div class="dice-card" data-dice="d10">
+                <div class="dice-image">D10</div>
+                <div class="quantity-controls">
+                    <button class="quantity-btn minus">-</button>
+                    <span class="current-quantity">0</span>
+                    <button class="quantity-btn plus">+</button>
+                </div>
+            </div>
+            <div class="dice-card" data-dice="d12">
+                <div class="dice-image">D12</div>
+                <div class="quantity-controls">
+                    <button class="quantity-btn minus">-</button>
+                    <span class="current-quantity">0</span>
+                    <button class="quantity-btn plus">+</button>
+                </div>
+            </div>
+            <div class="dice-card" data-dice="d20">
+                <div class="dice-image">D20</div>
+                <div class="quantity-controls">
+                    <button class="quantity-btn minus">-</button>
+                    <span class="current-quantity">0</span>
+                    <button class="quantity-btn plus">+</button>
+                </div>
+            </div>
+        </div>
+        <div class="global-options">
+            <label><input type="checkbox" id="global-advantage" /> 优势</label>
+            <label><input type="checkbox" id="global-disadvantage" /> 劣势</label>
+        </div>
+        <div class="roll-controls">
+            <button id="roll-button">投掷骰子</button>
+            <button id="reset-button">重置所有</button>
+        </div>
+        <div class="progress-bar-container">
+            <div class="progress-bar"></div>
+            <div class="progress-bar-text">随机数计算中</div>
+        </div>
+        <div id="result" class="result-display"></div>
+    </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            document.querySelectorAll(".quantity-controls").forEach((controls) => {
+                const display = controls.querySelector(".current-quantity");
+                const plusBtn = controls.querySelector(".plus");
+                const minusBtn = controls.querySelector(".minus");
+                plusBtn.addEventListener("click", () => {
+                    display.textContent = Math.min(99, +display.textContent + 1);
+                });
+                minusBtn.addEventListener("click", () => {
+                    display.textContent = Math.max(0, +display.textContent - 1);
+                });
+            });
+
+            const advantageCheckbox = document.getElementById("global-advantage");
+            const disadvantageCheckbox = document.getElementById("global-disadvantage");
+            advantageCheckbox.addEventListener("change", () => {
+                if (advantageCheckbox.checked) {
+                    disadvantageCheckbox.checked = false;
+                }
+            });
+            disadvantageCheckbox.addEventListener("change", () => {
+                if (disadvantageCheckbox.checked) {
+                    advantageCheckbox.checked = false;
+                }
+            });
+
+            function getRandomInt(min, max) {
+                return Math.floor(Math.random() * (max - min + 1)) + min;
+            }
+
+            function buildRollHtml(rolls) {
+                let resultHtml = "";
+                let grandTotal = 0;
+                for (const diceType in rolls) {
+                    if (rolls.hasOwnProperty(diceType)) {
+                        const quantity = rolls[diceType].quantity;
+                        if (quantity === 0) continue;
+                        resultHtml += `<h3>${diceType.toUpperCase()} ×${quantity}</h3><ul>`;
+                        const subtotal = rolls[diceType].subtotal;
+                        rolls[diceType].rolls.forEach(roll => {
+                            if (typeof roll === 'object') {
+                                const prefix = advantageCheckbox.checked ? "优势" : "劣势";
+                                resultHtml += `<li>${prefix} (${roll.roll1}, ${roll.roll2}) --> ${roll.finalRoll}</li>`;
+                            } else {
+                                resultHtml += `<li>${roll}</li>`;
+                            }
+                        });
+                        resultHtml += `</ul><div><strong>小计: ${subtotal}</strong></div><hr>`;
+                        grandTotal += subtotal;
+                    }
+                }
+                if (grandTotal > 0) {
+                    resultHtml += `<div class="total-sum">全局总计: ${grandTotal}</div>`;
+                }
+                return resultHtml;
+            }
+
+            document.getElementById("roll-button").addEventListener("click", () => {
+                const resultDiv = document.getElementById("result");
+                const progressBarContainer = document.querySelector(".progress-bar-container");
+                const progressBar = document.querySelector(".progress-bar");
+
+                resultDiv.innerHTML = "";
+                progressBarContainer.style.display = "block";
+
+                progressBarContainer.scrollIntoView({ behavior: "smooth" });
+
+                let allRolls = {};
+                document.querySelectorAll(".dice-card").forEach((card) => {
+                    const diceType = card.dataset.dice;
+                    const quantity = +card.querySelector(".current-quantity").textContent;
+                    const sides = parseInt(diceType.substring(1));
+                    allRolls[diceType] = { quantity: quantity, rolls: [], subtotal: 0 };
+                    for (let i = 0; i < quantity; i++) {
+                        if (advantageCheckbox.checked || disadvantageCheckbox.checked) {
+                            const roll1 = getRandomInt(1, sides);
+                            const roll2 = getRandomInt(1, sides);
+                            const finalRoll = advantageCheckbox.checked ? Math.max(roll1, roll2) : Math.min(roll1, roll2);
+                            allRolls[diceType].rolls.push({ roll1, roll2, finalRoll });
+                            allRolls[diceType].subtotal += finalRoll;
+                        } else {
+                            const roll = getRandomInt(1, sides);
+                            allRolls[diceType].rolls.push(roll);
+                            allRolls[diceType].subtotal += roll;
+                        }
+                    }
+                });
+
+                const duration = 1000;
+                const startTime = performance.now();
+                function animate() {
+                    const now = performance.now();
+                    const progress = Math.min((now - startTime) / duration, 1);
+                    progressBar.style.width = (progress * 100) + '%';
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        progressBarContainer.style.display = "none";
+                        resultDiv.innerHTML = buildRollHtml(allRolls);
+                        resultDiv.scrollIntoView({ behavior: "smooth" });
+                    }
+                }
+                requestAnimationFrame(animate);
+            });
+
+            document.getElementById("reset-button").addEventListener("click", () => {
+                document.querySelectorAll(".current-quantity").forEach((span) => {
+                    span.textContent = "0";
+                });
+                advantageCheckbox.checked = false;
+                disadvantageCheckbox.checked = false;
+                document.getElementById("result").innerHTML = "";
+                document.querySelector(".progress-bar-container").style.display = "none";
+            });
+        });
+    </script>
+</body>
+
+</html>
