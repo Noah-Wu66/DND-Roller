@@ -324,144 +324,147 @@
         <div id="result" class="result-display"></div>
     </div>
     <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            document.querySelectorAll(".quantity-controls").forEach((controls) => {
-                const display = controls.querySelector(".current-quantity");
-                const plusBtn = controls.querySelector(".plus");
-                const minusBtn = controls.querySelector(".minus");
+    document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll(".quantity-controls").forEach((controls) => {
+            const display = controls.querySelector(".current-quantity");
+            const plusBtn = controls.querySelector(".plus");
+            const minusBtn = controls.querySelector(".minus");
 
-                plusBtn.addEventListener("click", () => {
-                    display.textContent = Math.min(99, +display.textContent + 1);
-                });
-                minusBtn.addEventListener("click", () => {
-                    display.textContent = Math.max(0, +display.textContent - 1);
-                });
-
-                const plus5Btn = controls.querySelector(".plus5");
-                const minus5Btn = controls.querySelector(".minus5");
-
-                plus5Btn.addEventListener("click", () => {
-                    display.textContent = Math.min(99, +display.textContent + 5);
-                });
-                minus5Btn.addEventListener("click", () => {
-                    display.textContent = Math.max(0, +display.textContent - 5);
-                });
+            plusBtn.addEventListener("click", () => {
+                display.textContent = Math.min(99, +display.textContent + 1);
+            });
+            minusBtn.addEventListener("click", () => {
+                display.textContent = Math.max(0, +display.textContent - 1);
             });
 
-            const advantageCheckbox = document.getElementById("global-advantage");
-            const disadvantageCheckbox = document.getElementById("global-disadvantage");
+            const plus5Btn = controls.querySelector(".plus5");
+            const minus5Btn = controls.querySelector(".minus5");
 
-            advantageCheckbox.addEventListener("change", () => {
-                if (advantageCheckbox.checked) {
-                    disadvantageCheckbox.checked = false;
-                }
+            plus5Btn.addEventListener("click", () => {
+                display.textContent = Math.min(99, +display.textContent + 5);
             });
-            disadvantageCheckbox.addEventListener("change", () => {
-                if (disadvantageCheckbox.checked) {
-                    advantageCheckbox.checked = false;
-                }
+            minus5Btn.addEventListener("click", () => {
+                display.textContent = Math.max(0, +display.textContent - 5);
             });
-
-            function getRandomInt(min, max) {
-                return Math.floor(Math.random() * (max - min + 1)) + min;
-            }
-
-            function buildRollHtml(rolls) {
-                let resultHtml = "";
-                let grandTotal = 0;
-
-                for (const diceType in rolls) {
-                    if (rolls.hasOwnProperty(diceType)) {
-                        const quantity = rolls[diceType].quantity;
-                        if (quantity === 0) continue;
-
-                        resultHtml += `<h3>${diceType.toUpperCase()} ×${quantity}</h3><ul>`;
-                        const subtotal = rolls[diceType].subtotal;
-
-                        rolls[diceType].rolls.forEach(roll => {
-                            if (typeof roll === 'object') {
-                                const prefix = advantageCheckbox.checked ? "优势" : "劣势";
-                                resultHtml += `<li>${prefix} (${roll.roll1}, ${roll.roll2}) --> ${roll.finalRoll}</li>`;
-                            } else {
-                                resultHtml += `<li>${roll}</li>`;
-                            }
-                        });
-                        resultHtml += `</ul><div><strong>小计: ${subtotal}</strong></div><hr>`;
-                        grandTotal += subtotal;
-                    }
-                }
-                if (grandTotal > 0) {
-                    resultHtml += `<div class="total-sum">全局总计: ${grandTotal}</div>`;
-                }
-                return resultHtml;
-            }
-
-            document.getElementById("roll-button").addEventListener("click", () => {
-                const resultDiv = document.getElementById("result");
-                const progressBarContainer = document.querySelector(".progress-bar-container");
-                const progressBar = document.querySelector(".progress-bar");
-
-                resultDiv.innerHTML = "";
-                progressBarContainer.style.display = "block";
-
-                progressBarContainer.scrollIntoView({ behavior: "smooth" });
-
-                let allRolls = {};
-
-                document.querySelectorAll(".dice-card").forEach((card) => {
-                    const diceType = card.dataset.dice;
-                    const quantity = +card.querySelector(".current-quantity").textContent;
-                    const sides = parseInt(diceType.substring(1));
-
-                    allRolls[diceType] = { quantity: quantity, rolls: [], subtotal: 0 };
-
-                    for (let i = 0; i < quantity; i++) {
-                        if (advantageCheckbox.checked || disadvantageCheckbox.checked) {
-                            const roll1 = getRandomInt(1, sides);
-                            const roll2 = getRandomInt(1, sides);
-                            const finalRoll = advantageCheckbox.checked ? Math.max(roll1, roll2) : Math.min(roll1, roll2);
-                            allRolls[diceType].rolls.push({ roll1, roll2, finalRoll });
-                            allRolls[diceType].subtotal += finalRoll;
-                        } else {
-                            const roll = getRandomInt(1, sides);
-                            allRolls[diceType].rolls.push(roll);
-                            allRolls[diceType].subtotal += roll;
-                        }
-                    }
-                });
-
-                const duration = 1000;
-                const startTime = performance.now();
-
-                function animate() {
-                    const now = performance.now();
-                    const progress = Math.min((now - startTime) / duration, 1);
-                    progressBar.style.width = (progress * 100) + '%';
-
-                    if (progress < 1) {
-                        requestAnimationFrame(animate);
-                    } else {
-                        progressBarContainer.style.display = "none";
-                        resultDiv.innerHTML = buildRollHtml(allRolls);
-                        resultDiv.scrollIntoView({ behavior: "smooth" });
-                    }
-                }
-
-                requestAnimationFrame(animate);
-            });
-
-            document.getElementById("reset-button").addEventListener("click", () => {
-                document.querySelectorAll(".current-quantity").forEach((span) => {
-                    span.textContent = "0";
-                });
-                advantageCheckbox.checked = false;
-                disadvantageCheckbox.checked = false;
-                document.getElementById("result").innerHTML = "";
-                document.querySelector(".progress-bar-container").style.display = "none";
-            });
-
         });
-    </script>
+
+        const advantageCheckbox = document.getElementById("global-advantage");
+        const disadvantageCheckbox = document.getElementById("global-disadvantage");
+
+        advantageCheckbox.addEventListener("change", () => {
+            if (advantageCheckbox.checked) {
+                disadvantageCheckbox.checked = false;
+            }
+        });
+        disadvantageCheckbox.addEventListener("change", () => {
+            if (disadvantageCheckbox.checked) {
+                advantageCheckbox.checked = false;
+            }
+        });
+
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function buildRollHtml(rolls) {
+            let resultHtml = "";
+            let grandTotal = 0;
+
+            for (const diceType in rolls) {
+                if (rolls.hasOwnProperty(diceType)) {
+                    const quantity = rolls[diceType].quantity;
+                    if (quantity === 0) continue;
+
+                    resultHtml += `<h3>${diceType.toUpperCase()} ×${quantity}</h3><ul>`;
+                    const subtotal = rolls[diceType].subtotal;
+
+                    rolls[diceType].rolls.forEach(roll => {
+                        if (typeof roll === 'object') {
+                            const prefix = advantageCheckbox.checked ? "优势" : "劣势";
+                            resultHtml += `<li>${prefix} (${roll.roll1}, ${roll.roll2}) --> ${roll.finalRoll}</li>`;
+                        } else {
+                            resultHtml += `<li>${roll}</li>`;
+                        }
+                    });
+                    resultHtml += `</ul><div><strong>小计: ${subtotal}</strong></div><hr>`;
+                    grandTotal += subtotal;
+                }
+            }
+            if (grandTotal > 0) {
+                resultHtml += `<div class="total-sum">全局总计: ${grandTotal}</div>`;
+            }
+            return resultHtml;
+        }
+
+        document.getElementById("roll-button").addEventListener("click", () => {
+            const resultDiv = document.getElementById("result");
+            const progressBarContainer = document.querySelector(".progress-bar-container");
+            const progressBar = document.querySelector(".progress-bar");
+
+            resultDiv.innerHTML = "";
+            progressBarContainer.style.display = "block";
+
+            progressBarContainer.scrollIntoView({ behavior: "smooth" });
+
+            let allRolls = {};
+
+            document.querySelectorAll(".dice-card").forEach((card) => {
+                const diceType = card.dataset.dice;
+                const quantity = +card.querySelector(".current-quantity").textContent;
+                const sides = parseInt(diceType.substring(1));
+
+                allRolls[diceType] = { quantity: quantity, rolls: [], subtotal: 0 };
+
+                for (let i = 0; i < quantity; i++) {
+                    if (advantageCheckbox.checked || disadvantageCheckbox.checked) {
+                        const roll1 = getRandomInt(1, sides);
+                        const roll2 = getRandomInt(1, sides);
+                        const finalRoll = advantageCheckbox.checked ? Math.max(roll1, roll2) : Math.min(roll1, roll2);
+                        allRolls[diceType].rolls.push({ roll1, roll2, finalRoll });
+                        allRolls[diceType].subtotal += finalRoll;
+                    } else {
+                        const roll = getRandomInt(1, sides);
+                        allRolls[diceType].rolls.push(roll);
+                        allRolls[diceType].subtotal += roll;
+                    }
+                }
+            });
+
+            const duration = 1000;
+            const startTime = performance.now();
+
+            function animate() {
+                // 在动画开始时重置进度条
+                progressBar.style.width = '0%';
+
+                const now = performance.now();
+                const progress = Math.min((now - startTime) / duration, 1);
+                progressBar.style.width = (progress * 100) + '%';
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    progressBarContainer.style.display = "none";
+                    resultDiv.innerHTML = buildRollHtml(allRolls);
+                    resultDiv.scrollIntoView({ behavior: "smooth" });
+                }
+            }
+
+            requestAnimationFrame(animate);
+        });
+
+        document.getElementById("reset-button").addEventListener("click", () => {
+            document.querySelectorAll(".current-quantity").forEach((span) => {
+                span.textContent = "0";
+            });
+            advantageCheckbox.checked = false;
+            disadvantageCheckbox.checked = false;
+            document.getElementById("result").innerHTML = "";
+            document.querySelector(".progress-bar-container").style.display = "none";
+        });
+
+    });
+</script>
 </body>
 
 </html>
