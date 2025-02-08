@@ -129,10 +129,47 @@
         }
 
         .global-options label {
-            font-size: 14px;
+            font-size: 16px;
             display: flex;
             align-items: center;
             gap: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            user-select: none;
+        }
+
+        .global-options label:hover {
+            border-color: #ddd;
+        }
+
+        .global-options input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+            position: relative;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        .global-options input[type="checkbox"]:checked {
+            background-color: #2196F3;
+            border-color: #2196F3;
+        }
+
+        .global-options input[type="checkbox"]:checked::before {
+            content: '\2713';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 14px;
         }
 
         .total-sum {
