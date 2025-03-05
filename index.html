@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DND 骰子模拟器</title>
     <link rel="icon" href="favicon.png" type="image/png">
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -31,6 +32,33 @@
             color: #333;
         }
 
+        #session-info {
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #666;
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+
+        #copy-session-link {
+            margin-left: 10px;
+            padding: 5px 10px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        #copy-session-link:hover {
+            background-color: #0b7dda;
+            transform: translateY(-1px);
+        }
+
         .dice-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -45,6 +73,12 @@
             padding: 12px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
             text-align: center;
+            transition: transform 0.2s;
+        }
+
+        .dice-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
         }
 
         .dice-image {
@@ -76,6 +110,11 @@
             color: white;
             font-size: 14px;
             cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .quantity-btn:hover {
+            background-color: #0b7dda;
         }
 
         .quantity-btn:active {
@@ -105,10 +144,20 @@
             background-color: #2196F3;
             color: #fff;
             cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .roll-controls button:hover {
+            background-color: #0b7dda;
+            transform: translateY(-2px);
         }
 
         #reset-button {
             background-color: #f44336;
+        }
+
+        #reset-button:hover {
+            background-color: #d32f2f;
         }
 
         .result-display {
@@ -233,6 +282,58 @@
             font-size: 14px;
         }
 
+        .dice-roll-info {
+            text-align: center;
+            color: #666;
+            margin-top: 10px;
+            padding: 5px;
+            border-radius: 5px;
+            font-style: italic;
+        }
+
+        #sync-status {
+            position: fixed;
+            bottom: 15px;
+            right: 15px;
+            background-color: #fff;
+            border-radius: 20px;
+            padding: 8px 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #666;
+            z-index: 100;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        #sync-status.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        #sync-status.syncing .sync-indicator {
+            background-color: #FFC107;
+        }
+
+        #sync-status.success .sync-indicator {
+            background-color: #4CAF50;
+        }
+
+        #sync-status.error .sync-indicator {
+            background-color: #F44336;
+        }
+
+        .sync-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #4CAF50;
+        }
+
         @media (min-width: 768px) {
             .dice-grid {
                 grid-template-columns: repeat(3, 1fr);
@@ -320,29 +421,295 @@
         </div>
         <div id="result" class="result-display"></div>
     </div>
+    <div id="sync-status">
+        <span class="sync-indicator"></span>
+        <span class="sync-text">已同步</span>
+    </div>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
+            const API_URL = 'https://dnd-database.zeabur.app/api/v1/dice';
+            const SOCKET_URL = 'https://dnd-database.zeabur.app';
+
+            // 获取或创建会话ID
+            let sessionId = new URLSearchParams(window.location.search).get('session');
+            if (!sessionId) {
+                const randomPart = Math.random().toString(36).substring(2, 12);
+                const timestampPart = Date.now().toString(36);
+                sessionId = randomPart + timestampPart;
+                window.history.pushState({}, '', `?session=${sessionId}`);
+            }
+            console.log("当前骰子会话ID:", sessionId);
+
+            // 创建会话信息显示
+            const sessionInfoDiv = document.createElement("div");
+            sessionInfoDiv.id = "session-info";
+            sessionInfoDiv.innerHTML = `
+                会话ID: <span id="session-id">${sessionId}</span>
+                <button id="copy-session-link">复制链接</button>
+            `;
+            const title = document.querySelector('h1');
+            title.parentNode.insertBefore(sessionInfoDiv, title.nextSibling);
+
+            // Socket.io连接和状态变量
+            let socket = null;
+            let isConnected = false;
+            let isLoadingData = false;
+            let lastSaveTime = 0;
+            let pendingSaveTimer = null;
+            let localUpdateInProgress = false;
+
+            // 初始化Socket连接
+            function initSocketConnection() {
+                socket = io(SOCKET_URL);
+                socket.on('connect', () => {
+                    console.log('已连接到服务器');
+                    isConnected = true;
+                    updateSyncStatus("success", "已连接");
+                    socket.emit('join-dice-session', sessionId);
+                });
+
+                socket.on('disconnect', () => {
+                    console.log('与服务器断开连接');
+                    isConnected = false;
+                    updateSyncStatus("error", "未连接");
+                    showConnectionError();
+                });
+
+                socket.on('dice-state-updated', (diceState) => {
+                    if (!isLoadingData && !localUpdateInProgress) {
+                        console.log("收到骰子状态更新:", diceState);
+                        updateDiceUIFromData(diceState);
+                    }
+                });
+
+                socket.on('dice-rolled', (rollResults) => {
+                    if (!isLoadingData) {
+                        console.log("收到骰子投掷结果:", rollResults);
+                        displayRollResults(rollResults, true);
+                    }
+                });
+            }
+
+            // 初始化应用
+            function initializeApp() {
+                console.log("初始化骰子应用...");
+                updateSyncStatus("connecting", "正在连接");
+                initSocketConnection();
+                loadFromServer();
+                setupCopySessionLink();
+            }
+
+            // 显示同步状态
+            function updateSyncStatus(state, message) {
+                const syncStatus = document.getElementById("sync-status");
+                syncStatus.className = "show";
+                if (state === "syncing") syncStatus.classList.add("syncing");
+                else if (state === "success") syncStatus.classList.add("success");
+                else if (state === "error") syncStatus.classList.add("error");
+                syncStatus.querySelector(".sync-text").textContent = message;
+                if (state === "success") {
+                    setTimeout(() => syncStatus.classList.remove("show"), 2000);
+                }
+            }
+
+            // 显示连接错误
+            function showConnectionError() {
+                const container = document.querySelector('.container');
+                const errorDiv = document.createElement('div');
+                errorDiv.style.backgroundColor = '#FFEBEE';
+                errorDiv.style.color = '#C62828';
+                errorDiv.style.padding = '15px';
+                errorDiv.style.borderRadius = '8px';
+                errorDiv.style.margin = '15px 0';
+                errorDiv.style.textAlign = 'center';
+                errorDiv.innerHTML = `
+                    <p>无法连接到服务器，同步功能可能不可用。</p>
+                    <button id="retry-btn" style="background-color:#2196F3; color:white; border:none; padding:8px 15px; border-radius:4px; cursor:pointer;">重试连接</button>
+                `;
+                
+                // 防止重复添加
+                const existingError = document.querySelector('.error-message');
+                if (existingError) existingError.remove();
+                
+                errorDiv.className = 'error-message';
+                container.insertBefore(errorDiv, document.getElementById('dice-container'));
+                
+                document.getElementById('retry-btn').addEventListener('click', () => {
+                    errorDiv.remove();
+                    initializeApp();
+                });
+            }
+
+            // 从服务器加载骰子状态
+            function loadFromServer() {
+                if (isLoadingData) return;
+                isLoadingData = true;
+                updateSyncStatus("syncing", "正在加载数据");
+                console.log("正在加载骰子会话数据...");
+                
+                fetch(`${API_URL}/sessions/${sessionId}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP错误! 状态: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(result => {
+                        if (result.success && result.data && result.data.diceState) {
+                            console.log("加载到骰子数据:", result.data);
+                            updateDiceUIFromData(result.data.diceState);
+                        } else {
+                            console.log("没有找到骰子会话数据或数据为空");
+                            // 第一次访问，发送初始状态
+                            saveToServer();
+                        }
+                        isLoadingData = false;
+                        updateSyncStatus("success", "数据已加载");
+                    })
+                    .catch(error => {
+                        console.error("加载骰子数据出错:", error);
+                        isLoadingData = false;
+                        updateSyncStatus("error", "加载失败");
+                    });
+            }
+
+            // 保存骰子状态到服务器
+            function saveToServer(immediate = false) {
+                if (isLoadingData || !isConnected) return;
+                
+                if (pendingSaveTimer) {
+                    clearTimeout(pendingSaveTimer);
+                    pendingSaveTimer = null;
+                }
+                
+                if (!immediate) {
+                    pendingSaveTimer = setTimeout(() => saveToServer(true), 300);
+                    return;
+                }
+                
+                updateSyncStatus("syncing", "正在保存...");
+                console.log("正在保存骰子会话数据...");
+                
+                const diceState = getCurrentDiceState();
+                
+                // 设置本地更新标志，防止处理自己的更新
+                localUpdateInProgress = true;
+                setTimeout(() => { localUpdateInProgress = false; }, 500);
+                
+                // 通过Socket发送更新
+                if (socket && socket.connected) {
+                    socket.emit('update-dice-state', {
+                        sessionId: sessionId,
+                        diceState: diceState
+                    });
+                }
+                
+                const saveTime = Date.now();
+                lastSaveTime = saveTime;
+                
+                fetch(`${API_URL}/sessions/${sessionId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ diceState: diceState })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP错误! 状态: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(result => {
+                    if (saveTime === lastSaveTime) {
+                        if (result.success) {
+                            console.log("骰子数据保存成功");
+                            updateSyncStatus("success", "已保存");
+                        } else {
+                            console.error("保存失败:", result.error);
+                            updateSyncStatus("error", "保存失败");
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error("保存骰子数据出错:", error);
+                    updateSyncStatus("error", "保存失败");
+                });
+            }
+
+            // 获取当前骰子状态
+            function getCurrentDiceState() {
+                const state = {
+                    dice: {},
+                    advantage: document.getElementById('global-advantage').checked,
+                    disadvantage: document.getElementById('global-disadvantage').checked
+                };
+                
+                document.querySelectorAll('.dice-card').forEach(card => {
+                    const diceType = card.dataset.dice;
+                    const quantity = parseInt(card.querySelector('.current-quantity').textContent);
+                    state.dice[diceType] = quantity;
+                });
+                
+                return state;
+            }
+
+            // 从数据更新UI
+            function updateDiceUIFromData(diceState) {
+                if (!diceState) return;
+                
+                // 更新骰子数量
+                if (diceState.dice) {
+                    document.querySelectorAll('.dice-card').forEach(card => {
+                        const diceType = card.dataset.dice;
+                        if (diceState.dice[diceType] !== undefined) {
+                            card.querySelector('.current-quantity').textContent = diceState.dice[diceType];
+                        }
+                    });
+                }
+                
+                // 更新优势/劣势选项
+                if (diceState.advantage !== undefined) {
+                    document.getElementById('global-advantage').checked = diceState.advantage;
+                }
+                
+                if (diceState.disadvantage !== undefined) {
+                    document.getElementById('global-disadvantage').checked = diceState.disadvantage;
+                }
+            }
+
+            // 设置复制会话链接的功能
+            function setupCopySessionLink() {
+                document.getElementById("copy-session-link").addEventListener("click", () => {
+                    const sessionLink = window.location.href;
+                    navigator.clipboard.writeText(sessionLink)
+                        .then(() => alert("骰子会话链接已复制到剪贴板，可以分享给其他人"))
+                        .catch(err => {
+                            console.error('复制失败: ', err);
+                            prompt("请手动复制以下链接:", sessionLink);
+                        });
+                });
+            }
+
+            // 原始功能：骰子控制
             document.querySelectorAll(".quantity-controls").forEach((controls) => {
                 const display = controls.querySelector(".current-quantity");
                 const plusBtn = controls.querySelector(".plus");
                 const minusBtn = controls.querySelector(".minus");
-                plusBtn.addEventListener("click", () => {
-                    display.textContent = Math.min(99, +display.textContent + 1);
-                });
-                minusBtn.addEventListener("click", () => {
-                    display.textContent = Math.max(0, +display.textContent - 1);
-                });
-
                 const plus5Btn = controls.querySelector(".plus5");
                 const minus5Btn = controls.querySelector(".minus5");
-                plus5Btn.addEventListener("click", () => {
-                    display.textContent = Math.min(99, +display.textContent + 5);
-                });
-                minus5Btn.addEventListener("click", () => {
-                    display.textContent = Math.max(0, +display.textContent - 5);
-                });
+                
+                function updateQuantity(change) {
+                    const newValue = Math.max(0, Math.min(99, parseInt(display.textContent) + change));
+                    display.textContent = newValue;
+                    saveToServer(); // 保存状态变更
+                }
+                
+                plusBtn.addEventListener("click", () => updateQuantity(1));
+                minusBtn.addEventListener("click", () => updateQuantity(-1));
+                plus5Btn.addEventListener("click", () => updateQuantity(5));
+                minus5Btn.addEventListener("click", () => updateQuantity(-5));
             });
 
+            // 优势/劣势复选框
             const advantageCheckbox = document.getElementById("global-advantage");
             const disadvantageCheckbox = document.getElementById("global-disadvantage");
 
@@ -350,17 +717,22 @@
                 if (advantageCheckbox.checked) {
                     disadvantageCheckbox.checked = false;
                 }
+                saveToServer();
             });
+            
             disadvantageCheckbox.addEventListener("change", () => {
                 if (disadvantageCheckbox.checked) {
                     advantageCheckbox.checked = false;
                 }
+                saveToServer();
             });
 
+            // 随机数生成
             function getRandomInt(min, max) {
                 return Math.floor(Math.random() * (max - min + 1)) + min;
             }
 
+            // 构建骰子结果HTML
             function buildRollHtml(rolls) {
                 let resultHtml = "";
                 let grandTotal = 0;
@@ -388,23 +760,45 @@
                 return resultHtml;
             }
 
+            // 显示骰子结果，可选择是否来自远程
+            function displayRollResults(rollResults, isRemote = false) {
+                const resultDiv = document.getElementById("result");
+                
+                // 如果是远程结果，添加提示
+                if (isRemote) {
+                    const remoteInfo = document.createElement("div");
+                    remoteInfo.className = "dice-roll-info";
+                    remoteInfo.textContent = "其他人投掷的骰子";
+                    resultDiv.appendChild(remoteInfo);
+                }
+                
+                resultDiv.innerHTML += buildRollHtml(rollResults);
+                resultDiv.scrollTop = resultDiv.scrollHeight; // 滚动到底部
+                
+                // 隐藏进度条（如果显示）
+                document.querySelector(".progress-bar-container").style.display = "none";
+            }
+
+            // 投掷骰子按钮
             document.getElementById("roll-button").addEventListener("click", () => {
                 const resultDiv = document.getElementById("result");
                 const progressBarContainer = document.querySelector(".progress-bar-container");
                 const progressBar = document.querySelector(".progress-bar");
 
+                // 清除之前的结果
                 resultDiv.innerHTML = "";
                 progressBar.style.width = "0%";
                 progressBarContainer.style.display = "block";
-                progressBarContainer.scrollIntoView({ behavior: "smooth" }); // Scroll to progress bar
+                progressBarContainer.scrollIntoView({ behavior: "smooth" }); // 滚动到进度条
 
                 let allRolls = {};
 
                 document.querySelectorAll(".dice-card").forEach((card) => {
                     const diceType = card.dataset.dice;
                     const quantity = +card.querySelector(".current-quantity").textContent;
+                    if (quantity === 0) return;
+                    
                     const sides = parseInt(diceType.substring(1));
-
                     allRolls[diceType] = { quantity: quantity, rolls: [], subtotal: 0 };
 
                     for (let i = 0; i < quantity; i++) {
@@ -422,7 +816,8 @@
                     }
                 });
 
-                const duration = 1000; // 1 second
+                // 动画效果
+                const duration = 1000; // 1秒
                 const startTime = performance.now();
 
                 function animate() {
@@ -434,14 +829,25 @@
                         requestAnimationFrame(animate);
                     } else {
                         progressBarContainer.style.display = "none";
-                        resultDiv.innerHTML = buildRollHtml(allRolls);
+                        
+                        // 显示结果
+                        displayRollResults(allRolls);
+                        
+                        // 通过Socket发送骰子结果
+                        if (socket && socket.connected) {
+                            socket.emit('roll-dice', {
+                                sessionId: sessionId,
+                                rollResults: allRolls
+                            });
+                        }
+                        
                         resultDiv.scrollIntoView({ behavior: "smooth" });
                     }
                 }
                 requestAnimationFrame(animate);
-
             });
 
+            // 重置按钮
             document.getElementById("reset-button").addEventListener("click", () => {
                 document.querySelectorAll(".current-quantity").forEach((span) => {
                     span.textContent = "0";
@@ -450,8 +856,47 @@
                 disadvantageCheckbox.checked = false;
                 document.getElementById("result").innerHTML = "";
                 document.querySelector(".progress-bar-container").style.display = "none";
-
+                
+                // 保存重置后的状态
+                saveToServer(true);
             });
+
+            // 网络状态事件监听
+            window.addEventListener('online', () => {
+                console.log('网络已连接');
+                if (!isConnected) {
+                    updateSyncStatus("syncing", "重新连接中...");
+                    setTimeout(() => initializeApp(), 1000);
+                }
+            });
+            
+            window.addEventListener('offline', () => {
+                console.log('网络连接已断开');
+                updateSyncStatus("error", "网络已断开");
+                isConnected = false;
+                showConnectionError();
+            });
+            
+            // 页面可见性变化监听
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible' && isConnected) {
+                    console.log('页面恢复前台，检查连接状态');
+                    loadFromServer();
+                }
+            });
+            
+            // 定期同步
+            function setupPeriodicSync() {
+                setInterval(() => {
+                    if (isConnected && !isLoadingData && document.visibilityState === 'visible') {
+                        saveToServer();
+                    }
+                }, 30000); // 每30秒同步一次
+            }
+
+            // 初始化
+            initializeApp();
+            setupPeriodicSync();
         });
     </script>
 </body>
